@@ -1,7 +1,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <SoftwareSerial.h>
 
-#define PRESSURE_THRESHOLD 20
+#define PRESSURE_THRESHOLD 40
 #define NUM_PIXELS         8
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS, 2, NEO_GRB + NEO_KHZ800);
