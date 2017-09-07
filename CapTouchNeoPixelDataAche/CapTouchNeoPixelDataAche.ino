@@ -4,6 +4,8 @@
 #define PRESSURE_THRESHOLD 40
 #define NUM_PIXELS         8
 
+bool previous[2] = {false, false};
+
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS, 2, NEO_GRB + NEO_KHZ800);
 SoftwareSerial BTserial(10, 11);
 uint32_t colours[10] = {
@@ -28,7 +30,12 @@ void setup() {
 }
 
 bool readTouch() {
-  return readCapacitivePin(8) > PRESSURE_THRESHOLD;
+  bool current = readCapacitivePin(8) > PRESSURE_THRESHOLD;
+  bool averaged = current && previous[0] && previous[1];
+  previous[1] = previous[0];
+  previous[0] = current;
+
+  return averaged;
 }
 
 void sendTouch(bool isTouched) {
