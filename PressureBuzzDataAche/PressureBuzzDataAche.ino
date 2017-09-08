@@ -33,33 +33,38 @@ void playBuzz(uint8_t buzz) {
   }
 }
 
-int readPressure() {
+void readPressure(int pressure[]) {
   if (debug) {
     Serial.print("Pressure [");
   }
-  int totalPressure = 0;
+  
   for (int i = 0; i < NUM_PRESSURE_SENSORS; i++) {
     if (debug && i > 0) {
       Serial.print(", ");
     }
-    totalPressure = totalPressure + (pressureValue(i) * max(1, pow(3, i)));
+    pressure[i] = pressureValueForSensor(i);
   }
   if (debug) {
     Serial.print("]");
   }
-
-  return totalPressure;
 }
 
-void sendPressure(int pressure) {
+void sendPressure(int pressure[]) {
+  String pressureString = "";
+  for (int i = 0; i < NUM_PRESSURE_SENSORS; i++) {
+    if (i > 0) {
+      pressureString += ",";
+    }
+    pressureString += pressure[i];
+  }
   if (debug) {
     Serial.print(" send: ");
-    Serial.print(pressure);
+    Serial.print(pressureString);
   }
-  BTserial.println(pressure);
+  BTserial.println(pressureString);
 }
 
-int pressureValue(int sensor) {
+int pressureValueForSensor(int sensor) {
   int sensorValue = analogRead(sensor);
   if (debug) {
     Serial.print(sensor);
@@ -99,12 +104,14 @@ int inputValueFromBT() {
   return -1;
 }
 
-int getBuzz(int pressure) {
+int getBuzz(int pressure[]) {
   int inputValue = inputValueFromBT();
 
 //  if (0 != inputValue) {
-//    if (pressure > 0) {
-//      return BUZZ_SHORT_PULSE;
+//    for (int i = 0; i < NUM_PRESSURE_SENSORS; i++) {
+//      if (pressure[i] > 0) {
+//        return BUZZ_SHORT_PULSE;
+//      }
 //    }
 //  
 //    if (1 == inputValue) {
@@ -117,7 +124,8 @@ int getBuzz(int pressure) {
 
 
 void loop() {
-  int pressure = readPressure();
+  int pressure[NUM_PRESSURE_SENSORS];
+  readPressure(pressure);
   sendPressure(pressure);
   playBuzz(getBuzz(pressure));
 }
