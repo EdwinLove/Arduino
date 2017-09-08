@@ -1,27 +1,34 @@
 #include <Adafruit_NeoPixel.h>
 #include <SoftwareSerial.h>
 
-#define PRESSURE_THRESHOLD 80
+#define PRESSURE_THRESHOLD 210
 #define NUM_PIXELS         8
-#define NUM_REMOTE_SENSORS 4
 
-bool averaged[3] = {false, false, false};
-bool currentTouchState = false;
-int remoteSensors[NUM_REMOTE_SENSORS];
+#define BRIGHT 255
+#define DIM    127
+
+int averaged[3] = {0, 0, 0};
+int averagedRemote[3] = {-1,-1, -1};
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_PIXELS, 2, NEO_GRB + NEO_KHZ800);
 SoftwareSerial BTserial(10, 11);
-uint32_t colours[10] = {
-  pixels.Color(255,255,255),
-  pixels.Color(0,127,0),
-  pixels.Color(0,255,0),
-  pixels.Color(127,0,0),
-  pixels.Color(127,127,0),
-  pixels.Color(127,255,0),
-  pixels.Color(255,0,0),
-  pixels.Color(255,127,0),
-  pixels.Color(255,255,0),
-  pixels.Color(0,0,0) 
+uint32_t colours[16] = {
+  pixels.Color(     0,     0,     0),
+  pixels.Color(     0,     0,   DIM),
+  pixels.Color(     0,   DIM,     0),
+  pixels.Color(     0,   DIM,   DIM),
+  pixels.Color(   DIM,     0,     0),
+  pixels.Color(   DIM,     0,   DIM),
+  pixels.Color(   DIM,   DIM,     0),
+  pixels.Color(   DIM,   DIM,   DIM),
+  pixels.Color(   DIM,   DIM,   DIM),
+  pixels.Color(     0,     0,BRIGHT),
+  pixels.Color(     0,BRIGHT,     0),
+  pixels.Color(     0,BRIGHT,BRIGHT),
+  pixels.Color(BRIGHT,     0,     0),
+  pixels.Color(BRIGHT,     0,BRIGHT),
+  pixels.Color(BRIGHT,BRIGHT,     0),
+  pixels.Color(BRIGHT,BRIGHT,BRIGHT),
 };
 bool debug = true;
 
@@ -30,21 +37,31 @@ void setup() {
   BTserial.begin(38400);
   pixels.begin();
   pixels.show();
-  for (int i = 0; i < NUM_REMOTE_SENSORS; i++) {
-    remoteSensors[i] = 0;
-  }
 }
 
 bool readTouch() {
+  int touchValue = readCapacitivePin(8);
   averaged[2] = averaged[1];
   averaged[1] = averaged[0];
-  averaged[0] = readCapacitivePin(8) > PRESSURE_THRESHOLD;
+  averaged[0] = touchValue;
 
-  if (currentTouchState) {
-    return averaged[0] || averaged[1] || averaged[2];
+  int averagedTotal = averaged[0] + averaged[1] + averaged[2];
+  if (debug) {
+    Serial.print("Touch value: ");
+    Serial.print(touchValue);
+    Serial.print(" [Average: ");
+    Serial.print(averagedTotal);
+    Serial.print(", ");
+    if (averagedTotal > PRESSURE_THRESHOLD) {
+      Serial.print("ABOVE");
+    } else {
+      Serial.print("BELOW");
+    } 
+    Serial.print(" threshold");
+    Serial.print("]");
   }
 
-  return averaged[0] && averaged[1] && averaged[2];
+  return averagedTotal > PRESSURE_THRESHOLD;
 }
 
 void sendTouch(bool isTouched) {
@@ -99,119 +116,55 @@ uint8_t readCapacitivePin(int pinToMeasure){
   *port &= ~(bitmask);
   *ddr  |= bitmask;
   
-  if (debug) {
-    Serial.print("Touch value: ");
-    Serial.print(cycles);
-    Serial.print(", ");
-    if (cycles > PRESSURE_THRESHOLD) {
-      Serial.print("ABOVE");
-    } else {
-      Serial.print("BELOW");
-    } 
-    Serial.print(" threshold");
-  }
-  
   return cycles;
 }
 
-String readFromBtSerial() {
-  String rawValue = "";
+int remoteStateFromBT() {
+  int returnValue = -1;
+
   while (BTserial.available() > 0) {
-//    Serial.print("#");
-//    Serial.print(BTserial.read());
-//    Serial.print("#");
-    char charRead = BTserial.read();
-    if (charRead == '\n' || charRead == '\r') {
-      return rawValue;
+    char rawValue = BTserial.read();
+    int intValue = int(rawValue) - 48;
+    if (intValue >= 0 && intValue <16) {
+      returnValue = intValue;
     }
-    rawValue += charRead;
   }
 
-  rawValue.trim();
-  return rawValue;
+  averagedRemote[2] = averagedRemote[1];
+  averagedRemote[1] = averagedRemote[0];
+  averagedRemote[0] = returnValue;
+
+  if (averagedRemote[0] != -1) {
+    return averagedRemote[0];
+  }
+  if (averagedRemote[1] != -1) {
+    return averagedRemote[1];
+  }
+
+  return averagedRemote[2];
 }
 
-void updateRemoteValuesFromBT() {
-  Serial.print(" [In from BT: ");
-  String rawValue = readFromBtSerial();
-  Serial.print(rawValue);
-  Serial.print("]");
-
-  int index = 0;
-  for (int i = 0; i< rawValue.length(); i++) {
-    char character = rawValue[i];
-    if (',' == character) {
-      continue; 
-    }
-    remoteSensors[index] = int(character) - 48;
-    index ++;
-    if (NUM_REMOTE_SENSORS >= index) {
-      break;
-    }
-  }
-
-  if (debug) {
-    Serial.print("[Remote - ");
-    for (int i = 0; i < NUM_REMOTE_SENSORS; i++) {
-      if (i > 0) {
-              Serial.print(", ");
-      }
-      Serial.print(i);
-      Serial.print(":");
-      Serial.print(remoteSensors[i]);
-    }
-    Serial.print("]");
-  }
-//  if ("" <> rawValue) {
- //   int intValue = (int)rawValue;
-//    int splitValue[NUM_REMOTE_SENSORS];
-//
-//    for (int i = 0; i < NUM_REMOTE_SENSORS; i++) {
-//      splitValue[i] = 
-//    }
-//    
-//    if (debug) {
-//      Serial.print(rawValue);
-//      Serial.print(">");
-//      Serial.print(asciiValue);
-//      Serial.print(">");
-//      Serial.print(asciiValue - 48);
-//      if (asciiValue > 57 || asciiValue < 48) {
-//        Serial.print("##INVALID##");
-//      }
-//      Serial.print("] ");
-//
-//      return asciiValue - 48;
-//    }
-//  } else {
-//    Serial.print(" [No input from BT] ");
-//  }
-  
-//  return -1;
-}
-
-uint32_t getColour(bool isTouched) {
-  int inputValue = 1;//inputValueFromBT();
-  if (-1 == inputValue) {
+uint32_t getColour(bool isTouched, int remoteState) {
+  if (remoteState < 1) {
     if (isTouched) {
       if (debug) {
-        Serial.print("Colour: White");
+        Serial.print("Colour: Random");
       }
-      return colours[0];
+      return colours[random(16)];
     } else {
       if (debug) {
         Serial.print("Colour: Black");
       }
-      return colours[9];
+      return colours[0];
     }
   }
 
   if (debug) {
     Serial.print("Colour: ");
-    Serial.print(inputValue);
+    Serial.print(remoteState);
   }
 
-  return colours[inputValue];
+  return colours[remoteState];
 }
 
 void showColour(uint32_t colour) {
@@ -226,10 +179,15 @@ void showColour(uint32_t colour) {
 }
 
 void loop() {
-  currentTouchState = readTouch();
-  sendTouch(currentTouchState);
-  updateRemoteValuesFromBT();
-  showColour(getColour(currentTouchState));
+  int remoteState = remoteStateFromBT();
+  if (debug) {
+    Serial.print("[In from BT: ");
+    Serial.print(remoteState);
+    Serial.print("] ");
+  }
+  bool isTouched = readTouch();
+  sendTouch(isTouched);
+  showColour(getColour(isTouched, remoteState));
   if (debug) {
     Serial.print(" actual: ");
     Serial.print(pixels.getPixelColor(0));
